@@ -128,6 +128,9 @@ void testHomography(){
     
 }
 
+/**
+ * calibration
+ */
 void testCalibration(){
       std::vector<std::string> files = {
         "/home/atway/code/opencv_data/left01.jpg",
@@ -232,6 +235,7 @@ void testCalibration(){
 int main(int argc, char **argv) {
 
   
+    
     testCalibration();
 
   
