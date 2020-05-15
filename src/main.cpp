@@ -9,6 +9,7 @@
 #include <opencv2/imgproc.hpp>
 #include <string>
 #include <opencv2/core/eigen.hpp>
+#include <boost/format.hpp>
 void decomposePMatrix() {
     using namespace Eigen;
 
@@ -88,7 +89,7 @@ void testHomography(){
     }
     std::cout << srcPoints.size() << std::endl;
     Eigen::Matrix3d H;
-    bool ok = findHomography(srcPoints, dstPoints, H, false);
+    bool ok = findHomography(srcPoints, dstPoints, H, true);
 
     if(ok){
         std::cout << "H = " << H << std::endl;
@@ -112,6 +113,12 @@ void testHomography(){
         H = 1.07926    -0.155123      -74.276
         -0.0604588      1.02924      40.2497
         -0.000114997 -0.000406556            1
+        
+        // 归一化
+        
+        H =  1.04498    -0.221204     -59.6102
+            -0.0475147     0.956021      42.3854
+            -0.000110262 -0.000579577            1
      * 
     H =  1.59953   -0.0338682     -1059.74
         -0.033448       1.6032     -889.907
@@ -121,9 +128,8 @@ void testHomography(){
     
 }
 
-int main(int argc, char **argv) {
-
-    std::vector<std::string> files= {
+void testCalibration(){
+      std::vector<std::string> files = {
         "/home/atway/code/opencv_data/left01.jpg",
         "/home/atway/code/opencv_data/left02.jpg",
         "/home/atway/code/opencv_data/left03.jpg",
@@ -139,6 +145,13 @@ int main(int argc, char **argv) {
         "/home/atway/code/opencv_data/left14.jpg",
     };
 
+    //files.resize(0);
+    
+    //for(int i=1; i<=10; ++i){
+    //boost::format fmt("%s/image%d.%s");
+    // files.push_back( (fmt % "/home/atway/code/slam/MVGAlgorithm/smartphoneimage" % i % "png").str());   
+    //}
+    
     std::vector<std::vector<Eigen::Vector2d>> imagePoints;
     std::vector<std::vector<Eigen::Vector3d>> objectPoints;
     cv::Size boardSize(9, 6);
@@ -176,7 +189,50 @@ int main(int argc, char **argv) {
     
     computeCameraCalibration(imagePoints, objectPoints);
     
+    
+    /*
+     * 
+     * 536.073 536.016 342.371 235.536 
+     * -0.265091 -0.0467179 0.252214 
+     *  0.00183296 -0.000314465  
+     * avg re projection error = 0.234593
+        0 projection error = 0.16992
+        1 projection error = 0.846329
+        2 projection error = 0.159117
+        3 projection error = 0.176626
+        4 projection error = 0.141207
+        5 projection error = 0.162312
+        6 projection error = 0.18801
+        7 projection error = 0.214098
+        8 projection error = 0.222171
+        9 projection error = 0.153192
+        10 projection error = 0.177543
+        11 projection error = 0.28586
+        12 projection error = 0.15332
+        
+        
+        opencv 的结果
+        camera_matrix: !!opencv-matrix
+        rows: 3
+        cols: 3
+        dt: d
+        data: [ 5.3591573396163199e+02, 0., 3.4228315473308373e+02, 0.,
+            5.3591573396163199e+02, 2.3557082909788173e+02, 0., 0., 1. ]
+        distortion_coefficients: !!opencv-matrix
+        rows: 5
+        cols: 1
+        dt: d
+        data: [ -2.6637260909660682e-01, -3.8588898922304653e-02,
+            1.7831947042852964e-03, -2.8122100441115472e-04,
+            2.3839153080878486e-01 ]
+        avg_reprojection_error: 3.9259098975581364e-01
+     * 
+     */
+}
+int main(int argc, char **argv) {
 
+  
+    testCalibration();
 
   
     return 0;

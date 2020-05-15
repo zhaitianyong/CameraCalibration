@@ -18,7 +18,7 @@
 #include "ceres_costfun.h"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
-
+#include <set>
 /*
  * 归一化
  */
@@ -32,16 +32,21 @@ void normal ( MatrixXd& P, Matrix3d& T )
     P.array().col ( 1 ) -= cy;
 
     double stdx = sqrt ( ( P.col ( 0 ).transpose() * P.col ( 0 ) ).mean() );
-
     double stdy = sqrt ( ( P.col ( 1 ).transpose() * P.col ( 1 ) ).mean() );
+ 
 
     double sqrt_2 = sqrt ( 2 );
     double scalex = sqrt_2 / stdx;
-    double scaley = sqrt_2 /stdy;
+    double scaley = sqrt_2 / stdy;
 
+    P.array().col(0) *= scalex;
+    P.array().col(1) *= scalex;
+    
     T << scalex, 0, -scalex*cx,
     0, scaley, -scaley*cy,
     0, 0, 1;
+    
+    
 }
 
 
@@ -108,6 +113,7 @@ bool findHomography ( std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen
 
     Matrix3d srcT, dstT;
     if(isNormal) {
+        //优化前
         normal ( srcNormal, srcT );
         normal ( dstNormal, dstT );
     }
@@ -119,6 +125,7 @@ bool findHomography ( std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen
     //std::cout << "v = " << v << std::endl;
 
     // 优化
+    
     {
 
         ceres::Problem optimizationProblem;
@@ -151,15 +158,16 @@ bool findHomography ( std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen
     M << v(0), v(1), v(2),
     v(3), v(4), v(5),
     v(6), v(7), v(8);
-    M.array() /= v(8);
+    
 
 
     // 4. 反计算H
     if(isNormal) {
         H = dstT.inverse() * M * srcT;
-
+        H.array() /= H(8);
     } else {
         H = M;
+        H.array() /= H(8);
     }
     //std::cout << "H " << H;
 
@@ -167,6 +175,10 @@ bool findHomography ( std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen
 }
 
 
+inline int rand_int (void)
+{
+    return std::rand();
+}
 bool findHomographyByOpenCV(std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen::Vector2d>& dstPoints, Eigen::Matrix3d& H) {
 
     std::vector<cv::Point2f> objectPoints, imagePoints;
@@ -223,28 +235,9 @@ bool findHomographyByRansac ( std::vector<Eigen::Vector2d>& srcPoints, std::vect
 
         cv::RNG rng ( cv::getTickCount() );
 
-        std::vector<int> indexes;
-        {
-            int _s = 0;
-            while ( _s < s ) {
-                int t = rng.uniform ( 0, n );
-                if ( _s > 0 ) {
-                    for ( auto& item: indexes ) {
-                        if ( item==t ) {
-                            break;
-                        } else {
-                            indexes.push_back ( t );
-                            _s ++;
-                            break;
-                        }
-                    }
-                } else {
-                    indexes.push_back ( t );
-                    _s++;
-                }
-
-            }
-
+        std::set<int> indexes;
+        while(indexes.size() < 4){
+           indexes.insert( rand_int() % n);
         }
 
         Matrix3d M;
@@ -252,15 +245,15 @@ bool findHomographyByRansac ( std::vector<Eigen::Vector2d>& srcPoints, std::vect
             // 计算H 点法
             MatrixXd _srcNormal ( s, 3 );
             MatrixXd _dstNormal ( s, 3 );
+            std::set<int>::const_iterator iter = indexes.cbegin();
+            for ( int j=0; j<s; j++, iter++ ) {
 
-            for ( int j=0; j<s; ++j ) {
-
-                _srcNormal ( j, 0 ) = srcNormal ( indexes[j], 0 );
-                _srcNormal ( j, 1 ) = srcNormal ( indexes[j], 1 );
+                _srcNormal ( j, 0 ) = srcNormal ( *iter, 0 );
+                _srcNormal ( j, 1 ) = srcNormal ( *iter, 1 );
                 _srcNormal ( j, 2 ) = 1.0;
 
-                _dstNormal ( j, 0 ) = dstNormal ( indexes[j], 0 );
-                _dstNormal ( j, 1 ) = dstNormal ( indexes[j], 1 );
+                _dstNormal ( j, 0 ) = dstNormal ( *iter, 0 );
+                _dstNormal ( j, 1 ) = dstNormal ( *iter, 1 );
                 _dstNormal ( j, 2 ) = 1.0;
             }
 
@@ -546,7 +539,7 @@ void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePo
         for(auto& v: objectPoints[i]) {
             objectPoints2d.push_back(Eigen::Vector2d(v(0), v(1)));
         }
-        bool ok = findHomography( objectPoints2d,imagePoints[i], H, false);
+        bool ok = findHomography( objectPoints2d,imagePoints[i], H, true);
         //findHomographyByOpenCV(objectPoints2d,imagePoints[i], H);
         homos.push_back(H);
     }
