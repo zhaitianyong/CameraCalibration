@@ -103,5 +103,73 @@ struct PROJECT_COST {
 
 };
 
+struct FISHER_PROJECT_COST {
+
+    Eigen::Vector3d objPt;
+    Eigen::Vector2d imgPt;
+
+    FISHER_PROJECT_COST(Eigen::Vector3d& objPt, Eigen::Vector2d& imgPt):objPt(objPt), imgPt(imgPt)
+    {}
+
+
+    template<typename T>
+    bool operator()(
+            const T *const k,
+            const T *const r,
+            const T *const t,
+            T* residuals)const
+    {
+
+        T pos3d[3] = {T(objPt(0)), T(objPt(1)), T(objPt(2))};
+        T pos3d_proj[3];
+        // 旋转
+        ceres::AngleAxisRotatePoint(r, pos3d, pos3d_proj);
+        // 平移
+        pos3d_proj[0] += t[0];
+        pos3d_proj[1] += t[1];
+        pos3d_proj[2] += t[2];
+
+        T xp = pos3d_proj[0] / pos3d_proj[2];
+        T yp = pos3d_proj[1] / pos3d_proj[2];
+
+
+
+        const T& fx = k[0];
+        const T& fy = k[1];
+        const T& cx = k[2];
+        const T& cy = k[3];
+
+        const T& k1 = k[4];
+        const T& k2 = k[5];
+        const T& k3 = k[6];
+        const T& k4 = k[7];
+
+
+        // 径向畸变
+        T r_ = ceres::sqrt(xp * xp + yp * yp);
+
+        // 等距离模型
+        T theta = ceres::atan(r_);
+
+        T thera_hat = theta * ( T(1.0) + k1*ceres::pow(theta, 2) + k2*ceres::pow(theta, 4) + k3*ceres::pow(theta, 6) + k4*ceres::pow(theta, 8));
+
+        T xdis = thera_hat*xp / r_;
+        T ydis = thera_hat*yp / r_;
+
+        // 像素距离
+        T u = fx*xdis + cx;
+        T v = fy*ydis + cy;
+
+
+        residuals[0] = u - T(imgPt[0]);
+
+        residuals[1] = v - T(imgPt[1]);
+
+
+        return true;
+    }
+
+};
+
 
 #endif

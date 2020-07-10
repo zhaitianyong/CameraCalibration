@@ -33,7 +33,7 @@ ${CERES_INCLUDE_DIRS}
 
 add_executable(${PROJECT_NAME} 
 src/main.cpp
-src/homography.cc
+        src/calibration.cc
 )
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}

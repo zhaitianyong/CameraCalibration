@@ -1,7 +1,7 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
 #include <eigen3/Eigen/QR>
-#include "homography.h"
+#include "calibration.h"
 #include <iostream>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/features2d.hpp>
@@ -133,28 +133,21 @@ void testHomography(){
  */
 void testCalibration(){
       std::vector<std::string> files = {
-        "/home/atway/code/opencv_data/left01.jpg",
-        "/home/atway/code/opencv_data/left02.jpg",
-        "/home/atway/code/opencv_data/left03.jpg",
-        "/home/atway/code/opencv_data/left04.jpg",
-        "/home/atway/code/opencv_data/left05.jpg",
-        "/home/atway/code/opencv_data/left06.jpg",
-        "/home/atway/code/opencv_data/left07.jpg",
-        "/home/atway/code/opencv_data/left08.jpg",
-        "/home/atway/code/opencv_data/left09.jpg",
-        "/home/atway/code/opencv_data/left11.jpg",
-        "/home/atway/code/opencv_data/left12.jpg",
-        "/home/atway/code/opencv_data/left13.jpg",
-        "/home/atway/code/opencv_data/left14.jpg",
+        "../data/images/left01.jpg",
+        "../data/images/left02.jpg",
+        "../data/images/left03.jpg",
+        "../data/images/left04.jpg",
+        "../data/images/left05.jpg",
+        "../data/images/left06.jpg",
+        "../data/images/left07.jpg",
+        "../data/images/left08.jpg",
+        "../data/images/left09.jpg",
+        "../data/images/left11.jpg",
+        "../data/images/left12.jpg",
+        "../data/images/left13.jpg",
+        "../data/images/left14.jpg",
     };
 
-    //files.resize(0);
-    
-    //for(int i=1; i<=10; ++i){
-    //boost::format fmt("%s/image%d.%s");
-    // files.push_back( (fmt % "/home/atway/code/slam/MVGAlgorithm/smartphoneimage" % i % "png").str());   
-    //}
-    
     std::vector<std::vector<Eigen::Vector2d>> imagePoints;
     std::vector<std::vector<Eigen::Vector3d>> objectPoints;
     cv::Size boardSize(9, 6);
@@ -188,10 +181,21 @@ void testCalibration(){
         getObjecPoints(boardSize, squareSize, corners);
         objectPoints.push_back(corners);
     }
-    
-    
-    computeCameraCalibration(imagePoints, objectPoints);
-    
+
+    cv::Mat cameraMatrix = cv::Mat::zeros(3, 3, CV_64F);
+    cv::Mat distCoeffs= cv::Mat::zeros(5, 1, CV_64F);
+    computeCameraCalibration(imagePoints, objectPoints, cameraMatrix, distCoeffs);
+
+    cv::Mat undistImag;
+    for(int i=0; i<files.size(); ++i) {
+        cv::Mat img = cv::imread(files[i]);
+        cv::undistort(img, undistImag, cameraMatrix, distCoeffs, cameraMatrix);
+        cv::imshow("out", undistImag);
+        cv::waitKey(100);
+    }
+
+    cv::destroyAllWindows();
+
     
     /*
      * 
@@ -232,6 +236,109 @@ void testCalibration(){
      * 
      */
 }
+
+
+/**
+ * 鱼眼镜头标定
+ */
+void testFisherCalibration(){
+    std::vector<std::string> files;
+
+    for(int i=0; i<32; ++i){
+     boost::format fmt("%s/%s%d.%s");
+     files.push_back( (fmt % "../data/fisher"% "right" % i % "jpg").str());
+    }
+
+    std::vector<std::vector<Eigen::Vector2d>> imagePoints;
+    std::vector<std::vector<Eigen::Vector3d>> objectPoints;
+    cv::Size boardSize(10, 7);
+    cv::Size2f squareSize(40., 40.);
+    for(int i=0; i<files.size(); ++i) {
+
+        cv::Mat img =  cv::imread(files[i]);
+        std::vector<cv::Point2f> corners;
+
+        bool ok = cv::findCirclesGrid(img, boardSize, corners, cv::CALIB_CB_SYMMETRIC_GRID);
+        if(ok) {
+//            cv::Mat gray;
+//            cv::cvtColor(img, gray, CV_BGR2GRAY);
+//            cv::cornerSubPix(gray, corners, cv::Size(11, 11), cv::Size(-1, -1), cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 0.001));
+
+
+            cv::drawChessboardCorners(img, boardSize, cv::Mat(corners), ok);
+            cv::imshow("corners", img);
+            cv::waitKey(100);
+            std::vector<Eigen::Vector2d> _corners;
+            for(auto& pt: corners){
+                _corners.push_back(Eigen::Vector2d(pt.x, pt.y));
+            }
+            imagePoints.push_back(_corners);
+        }
+
+    }
+
+    for(int i=0; i<imagePoints.size(); ++i){
+        std::vector<Eigen::Vector3d> corners;
+        getObjecPoints(boardSize, squareSize, corners);
+        objectPoints.push_back(corners);
+    }
+
+    cv::Mat cameraMatrix = cv::Mat::zeros(3, 3, CV_64F);
+    cv::Mat distCoeffs= cv::Mat::zeros(4, 1, CV_64F);
+    computeFisherCameraCalibration(imagePoints, objectPoints, cameraMatrix, distCoeffs);
+
+    cv::Mat undistImag;
+    for(int i=0; i<files.size(); ++i) {
+        cv::Mat img = cv::imread(files[i]);
+        cv::fisheye::undistortImage(img, undistImag, cameraMatrix, distCoeffs, cameraMatrix);
+        cv::imshow("out", undistImag);
+        cv::waitKey(1000);
+    }
+
+    cv::destroyAllWindows();
+
+    /**
+     *
+     * left
+     * 370.386 369.169 374.536 235.484 -0.0184757 -0.00458729 -0.00543428 0.00295295
+     *
+     * right
+     * 369.212 367.701 372.17 231.485 -0.0130884 -0.0287408 0.0307711 -0.013334
+     *
+     * 标准的
+     *
+     */
+    // 相机模型为鱼眼镜头
+    /**
+     *
+         I/setero_mynt.cc:65 Intrinsics left: {equidistant, width: 752, height: 480,
+         k2: -0.01509692738043893,
+         k3: -0.03488162590077018,
+         k4: 0.05372013323333781,
+         k5: -0.02979241878641033,
+         mu: 369.61759181873406988,
+         mv: 369.54921986988949811,
+         u0: 374.59465658384857534,
+         v0: 235.16259026829271761}
+        I/setero_mynt.cc:66 Intrinsics right: {equidistant, width: 752, height: 480,
+        k2: -0.02267636068078869,
+        k3: 0.00012273207057233,
+        k4: -0.00412066517603011,
+        k5: 0.00077768928909407,
+        mu: 369.65416692810941868,
+        mv: 369.56670990194794513,
+        u0: 372.31377002663646181,
+        v0: 230.59248921651672504}
+        I/setero_mynt.cc:67 Extrinsics right to left: {
+        rotation: [0.99998366413954298, -0.00328144799649875, 0.00468012319281784,
+        0.00328505774061074, 0.99999431247580406, -0.00076381390718632,
+        -0.00467759015888851, 0.00077917590455050, 0.99998875645439900], t
+        ranslation: [-120.19933355765978433, -0.06117490766245021, 0.73604873985802033]}
+     */
+}
+
+
+
 int main(int argc, char **argv) {
 
   

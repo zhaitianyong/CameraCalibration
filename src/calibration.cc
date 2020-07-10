@@ -14,7 +14,7 @@
  * 
  */
 
-#include "homography.h"
+#include "calibration.h"
 #include "ceres_costfun.h"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
@@ -475,7 +475,17 @@ void getObjecPoints(const cv::Size& borderSize, const cv::Size2f& squareSize, st
 }
 
 
-
+/**
+ * 计算重投影误差
+ * @param objectPoints
+ * @param imagePoints
+ * @param rvecs
+ * @param tvecs
+ * @param cameraMatrix
+ * @param distCoeffs
+ * @param perViewErrors
+ * @return
+ */
 double computeReprojectionErrors(const vector<vector<Eigen::Vector3d>>& objectPoints, const vector<vector<Eigen::Vector2d>>& imagePoints, const vector<Eigen::Vector3d>& rvecs, const vector<Eigen::Vector3d>& tvecs, const Eigen::Matrix3d& cameraMatrix, const Eigen::VectorXd& distCoeffs, vector<double>& perViewErrors)
 {
     vector<cv::Point2f> imagePoints2;
@@ -519,6 +529,67 @@ double computeReprojectionErrors(const vector<vector<Eigen::Vector3d>>& objectPo
 }
 
 
+/**
+ * 鱼眼镜头重投影误差
+ * @param objectPoints
+ * @param imagePoints
+ * @param rvecs
+ * @param tvecs
+ * @param cameraMatrix
+ * @param distCoeffs
+ * @param perViewErrors
+ * @return
+ */
+double computeFisherReprojectionErrors(const vector<vector<Eigen::Vector3d>>& objectPoints, const vector<vector<Eigen::Vector2d>>& imagePoints, const vector<Eigen::Vector3d>& rvecs, const vector<Eigen::Vector3d>& tvecs, const Eigen::Matrix3d& cameraMatrix, const Eigen::VectorXd& distCoeffs, vector<double>& perViewErrors)
+{
+    vector<cv::Point2f> imagePoints2;
+    int totalPoints = 0;
+    double totalErr = 0;
+    perViewErrors.resize(objectPoints.size());
+    double k1 = distCoeffs(0);
+    double k2 = distCoeffs(1);
+    double k3 = distCoeffs(2);
+    double k4 = distCoeffs(3);
+    double fx = cameraMatrix(0,0), fy = cameraMatrix(1,1);
+    double cx = cameraMatrix(0,2), cy = cameraMatrix(1,2);
+    for (int i = 0; i < objectPoints.size(); ++i)
+    {
+
+        Matrix3d R = rotationVector2Matrix(rvecs[i]);
+        int n = objectPoints[i].size();
+        double _errSum=0;
+        for(int j =0; j<n; ++j){
+
+            Vector3d cam =  R*objectPoints[i][j]+tvecs[i];
+            double xp = cam(0) / cam(2);
+            double yp = cam(1) / cam(2);
+
+            // 鱼眼镜头模型
+            double r_ = sqrt(xp*xp + yp*yp);
+            double theta = atan(r_);
+
+            double thera_hat = theta * (1 + k1*pow(theta, 2) + k2*pow(theta, 4) + k3*pow(theta, 6) + k4*pow(theta, 8));
+
+            double xdis = thera_hat*xp / r_;
+            double ydis = thera_hat*yp / r_;
+
+            double u = fx*xdis+cx;
+            double v = fy*ydis+cy;
+
+            double _err = sqrt( pow(u - imagePoints[i][j](0), 2) + pow(v - imagePoints[i][j](1), 2));
+
+            _errSum += _err;
+        }
+
+        perViewErrors[i] = _errSum / n;
+        totalErr += _errSum;
+        totalPoints += n;
+    }
+
+
+    return totalErr / totalPoints;
+}
+
 
 
 
@@ -526,7 +597,7 @@ double computeReprojectionErrors(const vector<vector<Eigen::Vector3d>>& objectPo
  * 相机标定
  */
 void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePoints,
-                              std::vector<std::vector<Eigen::Vector3d>>& objectPoints)
+                              std::vector<std::vector<Eigen::Vector3d>>& objectPoints, cv::Mat& cameraMatrix, cv::Mat& distCoeffs)
 {
 
     std::cout << " fit homography ....." << std::endl;
@@ -626,18 +697,22 @@ void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePo
             //cameraMatrix = (cv::Mat_<double>(3, 3) << k[0], 0.0, k[2], 0, k[1], k[3], 0, 0, 1);
             //distCoeffs = (cv::Mat_<double>(1, 5) << k[4], k[5], k[7], k[8], k[6]);
 
-            Eigen::Matrix3d cameraMatrix;
-            cameraMatrix << k[0], 0.0, k[2], 0, k[1], k[3], 0, 0, 1;
-            Eigen::VectorXd  distCoeffs(5);
-            distCoeffs << k[4], k[5], k[7], k[8], k[6];
+            Eigen::Matrix3d cameraMatrix_;
+            cameraMatrix_ << k[0], 0.0, k[2], 0, k[1], k[3], 0, 0, 1;
+            Eigen::VectorXd  distCoeffs_(5);
+            distCoeffs_ << k[4], k[5], k[7], k[8], k[6];
             
             std::vector<double> reprojErrs;
-            double totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints, rList, tList, cameraMatrix, distCoeffs, reprojErrs);
+            double totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints, rList, tList, cameraMatrix_, distCoeffs_, reprojErrs);
             std::cout << " avg re projection error = " << totalAvgErr << std::endl;
             for (size_t i = 0; i < reprojErrs.size(); i++)
             {
                 std::cout << i << " projection error = " << reprojErrs[i] << std::endl;
             }
+
+            // Mat
+            cv::eigen2cv(cameraMatrix_, cameraMatrix);
+            cv::eigen2cv(distCoeffs_, distCoeffs);
         }
     }
 
@@ -645,4 +720,131 @@ void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePo
 
 
 
+/**
+ * 鱼眼相机标定
+ */
+void computeFisherCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePoints,
+                                    std::vector<std::vector<Eigen::Vector3d>>& objectPoints, cv::Mat& cameraMatrix, cv::Mat& distCoeffs){
+
+    std::cout << " fit homography ....." << std::endl;
+    int n = imagePoints.size();
+    std::vector<Eigen::Matrix3d> homos;
+    for (int i=0; i<n; ++i)
+    {
+        Eigen::Matrix3d H;
+        std::vector<Eigen::Vector2d> objectPoints2d;
+        for(auto& v: objectPoints[i]) {
+            objectPoints2d.push_back(Eigen::Vector2d(v(0), v(1)));
+        }
+        bool ok = findHomography( objectPoints2d,imagePoints[i], H, true);
+        //findHomographyByOpenCV(objectPoints2d,imagePoints[i], H);
+        homos.push_back(H);
+    }
+    std::cout << " fit homography finished" << std::endl;
+
+    // 计算相机内参初始值
+    std::cout << " solve init camera intrinsic ..." << std::endl;
+
+    Eigen::Matrix3d K = solveInitCameraIntrinsic(homos);
+
+    std::cout << "init k" << K << std::endl;
+    // 计算每组的外参（旋转矩阵和平移向量）
+    std::vector<Matrix3d> RList;
+    std::vector<Vector3d> tList;
+    std::cout << " solve init camera extrinsic ..." << std::endl;
+    solveInitCameraExtrinsic(homos, K, RList, tList);
+    std::cout << " solve init camera extrinsic finished" << std::endl;
+    std::vector<Vector3d> rList;
+    for(auto& item: RList) {
+        Vector3d _r = rotationMatrix2Vector(item);
+        rList.push_back(_r);
+    }
+    std::cout << " solve ceres::Solver::Options ..." << std::endl;
+
+    // 优化算法
+    {
+        //
+        ceres::Problem problem;
+        double k[8] = {K(0,0), K(1,1), K(0,2), K(1,2), 0., 0., 0., 0.};
+
+
+        for(int i=0; i<n; ++i) {
+
+
+            for(int j=0; j<imagePoints[i].size(); ++j) {
+
+                ceres::CostFunction* costFunction=new ceres::AutoDiffCostFunction<FISHER_PROJECT_COST, 2, 8, 3, 3>(
+                        new FISHER_PROJECT_COST(objectPoints[i][j], imagePoints[i][j]));
+
+                problem.AddResidualBlock(costFunction,
+                                         nullptr,
+                                         k,
+                                         rList[i].data(),
+                                         tList[i].data()
+                );
+
+            }
+        }
+        std::cout << " solve Options ..." << std::endl;
+
+        ceres::Solver::Options options;
+        options.minimizer_progress_to_stdout = true;
+        //options.linear_solver_type = ceres::DENSE_SCHUR;
+        //options.trust_region_strategy_type = ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
+        //options.preconditioner_type = ceres::JACOBI;
+        //options.sparse_linear_algebra_library_type = ceres::EIGEN_SPARSE;
+        ceres::Solver::Summary summary;
+        ceres::Solve(options, &problem, &summary);
+        std::cout << summary.BriefReport() << std::endl;
+
+
+        if (!summary.IsSolutionUsable())
+        {
+            std::cout << "Bundle Adjustment failed." << std::endl;
+        }
+        else
+        {
+            //summary.num_
+            // Display statistics about the minimization
+            std::cout << std::endl
+                      << "Bundle Adjustment statistics (approximated RMSE):\n"
+                      << " #views: " << n << "\n"
+                      << " #residuals: " << summary.num_residuals << "\n"
+                      << " #num_parameters: " << summary.num_parameters << "\n"
+                      << " #num_parameter_blocks: " << summary.num_parameter_blocks << "\n"
+                      << " Initial RMSE: " << std::sqrt(summary.initial_cost / summary.num_residuals) << "\n"
+                      << " Final RMSE: " << std::sqrt(summary.final_cost / summary.num_residuals) << "\n"
+                      << " Time (s): " << summary.total_time_in_seconds << "\n"
+                      << std::endl;
+
+            for(auto& a: k) std::cout << a << " " ;
+
+            //cv::Mat cameraMatrix, distCoeffs;
+            //cameraMatrix = (cv::Mat_<double>(3, 3) << k[0], 0.0, k[2], 0, k[1], k[3], 0, 0, 1);
+            //distCoeffs = (cv::Mat_<double>(1, 5) << k[4], k[5], k[7], k[8], k[6]);
+
+            Eigen::Matrix3d cameraMatrix_;
+            cameraMatrix_ << k[0], 0.0, k[2], 0, k[1], k[3], 0, 0, 1;
+            Eigen::Vector4d distCoeffs_;
+            distCoeffs_ << k[4], k[5], k[6], k[7];
+
+
+
+
+            std::vector<double> reprojErrs;
+            double totalAvgErr = computeFisherReprojectionErrors(objectPoints, imagePoints, rList, tList, cameraMatrix_, distCoeffs_, reprojErrs);
+            std::cout << " avg re projection error = " << totalAvgErr << std::endl;
+            for (size_t i = 0; i < reprojErrs.size(); i++)
+            {
+                std::cout << i << " projection error = " << reprojErrs[i] << std::endl;
+            }
+
+            // Mat
+            cv::eigen2cv(cameraMatrix_, cameraMatrix);
+            cv::eigen2cv(distCoeffs_, distCoeffs);
+
+        }
+    }
+
+}
 
