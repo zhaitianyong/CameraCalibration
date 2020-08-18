@@ -76,7 +76,7 @@ VectorXd solveHomographyDLT ( MatrixXd& srcNormal, MatrixXd& dstNormal )
         input ( 2*i+1, 4 ) = 0.;
         input ( 2*i+1, 5 ) = 0.;
         input ( 2*i+1, 6 ) = -srcNormal ( i, 0 ) * dstNormal ( i, 0 );
-        input ( 2*i+1, 7 ) = -srcNormal ( i, 0 ) * dstNormal ( i, 1 );
+        input ( 2*i+1, 7 ) = -srcNormal ( i, 1 ) * dstNormal ( i, 0 );
         input ( 2*i+1, 8 ) = -dstNormal ( i, 0 );
     }
 
