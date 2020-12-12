@@ -70,33 +70,30 @@ struct PROJECT_COST {
         const T& p1 = k[7];
         const T& p2 = k[8];
 
-        // 径向畸变
         T r_2 = xp*xp + yp*yp;
 
         /*
+        // 径向畸变
         T xdis = xp*(T(1.) + k1*r_2 + k2*r_2*r_2 + k3*r_2*r_2*r_2);
         T ydis = yp*(T(1.) + k1*r_2 + k2*r_2*r_2 + k3*r_2*r_2*r_2);
 
         // 切向畸变
-
         xdis = xdis + T(2.)*p1*xp*yp + p2*(r_2 + T(2.)*xp*xp);
         ydis = ydis + p1*(r_2 + T(2.)*yp*yp) + T(2.)*p2*xp*yp;
         */
-        
+
+        // 径向畸变和切向畸变
         T xdis = xp*(T(1.) + k1*r_2 + k2*r_2*r_2 + k3*r_2*r_2*r_2) + T(2.)*p1*xp*yp + p2*(r_2 + T(2.)*xp*xp);
         T ydis = yp*(T(1.) + k1*r_2 + k2*r_2*r_2 + k3*r_2*r_2*r_2) + p1*(r_2 + T(2.)*yp*yp) + T(2.)*p2*xp*yp;
         
-        
-        
+
         // 像素距离
         T u = fx*xdis + cx;
         T v = fy*ydis + cy;
 
-
         residuals[0] = u - T(imgPt[0]);
 
         residuals[1] = v - T(imgPt[1]);
-
 
         return true;
     }

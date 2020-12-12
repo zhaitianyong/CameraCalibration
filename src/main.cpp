@@ -132,6 +132,7 @@ void testHomography(){
  * calibration
  */
 void testCalibration(){
+    // 1.0 准备数据
       std::vector<std::string> files = {
         "../data/images/left01.jpg",
         "../data/images/left02.jpg",
@@ -148,25 +149,26 @@ void testCalibration(){
         "../data/images/left14.jpg",
     };
 
+    // 2. 提取棋盘格角点
     std::vector<std::vector<Eigen::Vector2d>> imagePoints;
     std::vector<std::vector<Eigen::Vector3d>> objectPoints;
-    cv::Size boardSize(9, 6);
-    cv::Size2f squareSize(25., 25.);
+    cv::Size boardSize(9, 6); // 棋盘格大小
+    cv::Size2f squareSize(25., 25.); // 单元格大小， 单位mm
     for(int i=0; i<files.size(); ++i) {
 
         cv::Mat img =  cv::imread(files[i]);
         std::vector<cv::Point2f> corners;
 
+        // 提取角点
         bool ok = cv::findChessboardCorners(img, boardSize, corners, cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE);
         if(ok) {
             cv::Mat gray;
             cv::cvtColor(img, gray, CV_BGR2GRAY);
             cv::cornerSubPix(gray, corners, cv::Size(11, 11), cv::Size(-1, -1), cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 0.001));
-            
-            
-           cv::drawChessboardCorners(img, boardSize, cv::Mat(corners), ok);
-           cv::imshow("corners", img);
-           cv::waitKey(100);
+            // 提取角点
+//           cv::drawChessboardCorners(img, boardSize, cv::Mat(corners), ok);
+//           cv::imshow("corners", img);
+//           cv::waitKey(1000);
             std::vector<Eigen::Vector2d> _corners;
             for(auto& pt: corners){
                 _corners.push_back(Eigen::Vector2d(pt.x, pt.y));
@@ -175,10 +177,10 @@ void testCalibration(){
         }
 
     }
-    
+    //3.0 设置世界坐标
     for(int i=0; i<imagePoints.size(); ++i){
         std::vector<Eigen::Vector3d> corners;
-        getObjecPoints(boardSize, squareSize, corners);
+        getObjectPoints(boardSize, squareSize, corners);
         objectPoints.push_back(corners);
     }
 
@@ -279,7 +281,7 @@ void testFisherCalibration(){
 
     for(int i=0; i<imagePoints.size(); ++i){
         std::vector<Eigen::Vector3d> corners;
-        getObjecPoints(boardSize, squareSize, corners);
+        getObjectPoints(boardSize, squareSize, corners);
         objectPoints.push_back(corners);
     }
 
@@ -341,10 +343,7 @@ void testFisherCalibration(){
 
 int main(int argc, char **argv) {
 
-  
-    
     testCalibration();
 
-  
     return 0;
 }

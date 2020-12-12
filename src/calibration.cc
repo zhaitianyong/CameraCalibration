@@ -335,29 +335,32 @@ bool findHomographyByRansac ( std::vector<Eigen::Vector2d>& srcPoints, std::vect
 
 }
 
+/**
+ *  Vij=[hi1hj1  hi1hj2+hi2hj1  hi2hj2  hi3hj1+hi1hj3  hi3hj2+hi2hj3  hi3hj3]
+ * @param H
+ * @param i
+ * @param j
+ * @return
+ */
 VectorXd getVector(const Matrix3d& H, int i, int j)
 {
-
     i -= 1;
     j -= 1;
-
     VectorXd v(6);
-
     v << H(0, i)*H(0, j), H(0, i)*H(1, j) + H(1, i)*H(0, j), H(1, i)*H(1, j), H(2, i)*H(0, j) + H(0, i)*H(2, j), H(2, i)*H(1, j) + H(1, i)*H(2, j), H(2, i)*H(2, j);
-
     return v;
 }
 
 /**
  *
- * 计算相机内参初始值
+ * 计算相机内参初始值, 求解Vb =0; 并计算K矩阵
  *
  */
 Matrix3d solveInitCameraIntrinsic(std::vector<Matrix3d>& homos)
 {
     int n = homos.size();
-
-    MatrixXd A(2*n, 6);
+    // Vb = 0
+    MatrixXd V(2*n, 6);
     for(int i=0; i<n; ++i)
     {
         VectorXd v1 = getVector(homos[i], 1, 2);
@@ -367,18 +370,20 @@ Matrix3d solveInitCameraIntrinsic(std::vector<Matrix3d>& homos)
 
         for(int j=0; j<6; ++j)
         {
-            A(2*i, j) = v1(j);
-            A(2*i+1, j) = v2(j);
+            V(2*i, j) = v1(j);
+            V(2*i+1, j) = v2(j);
         }
     }
 
-    JacobiSVD<MatrixXd> svdSolver (A, ComputeThinV);
-    MatrixXd V = svdSolver.matrixV();
-    MatrixXd b = V.rightCols(1);
+    //SVD 分解
+    JacobiSVD<MatrixXd> svdSolver (V, ComputeThinV);
+    MatrixXd v = svdSolver.matrixV();
+    MatrixXd b = v.rightCols(1);
 
     std::cout <<"b = " << b << std::endl;
 
 
+    // 求解内参 fx fy c uo v0
     double B11 = b(0), B12 = b(1), B22 = b(2), B13 = b(3), B23 = b(4), B33 = b(5);
     double v0 = (B12*B13-B11*B23) / (B11*B22-B12*B12);
     double s = B33-(B13*B13+v0*(B12*B13-B11*B23)) / B11;
@@ -461,13 +466,12 @@ Matrix3d rotationVector2Matrix(const Vector3d& v)
 }
 
 
-void getObjecPoints(const cv::Size& borderSize, const cv::Size2f& squareSize, std::vector<Eigen::Vector3d>& objectPoints) {
+void getObjectPoints(const cv::Size& borderSize, const cv::Size2f& squareSize, std::vector<Eigen::Vector3d>& objectPoints) {
 
+    // 以棋盘格左上角为原点
     for(int r=0; r<borderSize.height; ++r)
     {
-
         for(int c=0; c<borderSize.width; ++c) {
-
             objectPoints.push_back(Eigen::Vector3d(c*squareSize.width, r*squareSize.height, 0.));
         }
 
@@ -612,6 +616,7 @@ void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePo
         }
         bool ok = findHomography( objectPoints2d,imagePoints[i], H, true);
         //findHomographyByOpenCV(objectPoints2d,imagePoints[i], H);
+        std::cout << H << std::endl;
         homos.push_back(H);
     }
     std::cout << " fit homography finished" << std::endl;
@@ -646,7 +651,10 @@ void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePo
 
 
             for(int j=0; j<imagePoints[i].size(); ++j) {
-
+                // 优化参数2->输出的残差数，表示x和y
+                // 9 表示 内参4个 畸变系数5个
+                // 3 外参，用旋转向量表示，输入需要把旋转矩阵转为旋转向量，再输入
+                // 3 外参 平移向量
                 ceres::CostFunction* costFunction=new ceres::AutoDiffCostFunction<PROJECT_COST, 2, 9, 3, 3>(
                     new PROJECT_COST(objectPoints[i][j], imagePoints[i][j]));
 

@@ -16,7 +16,7 @@ bool findHomography(std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen::
 bool findHomographyByRansac(std::vector<Eigen::Vector2d>& srcPoints, std::vector<Eigen::Vector2d>& dstPoints, Eigen::Matrix3d& H);
 
 
-void getObjecPoints(const cv::Size& borderSize, const cv::Size2f& squareSize, std::vector<Eigen::Vector3d>& objectPoints);
+void getObjectPoints(const cv::Size& borderSize, const cv::Size2f& squareSize, std::vector<Eigen::Vector3d>& objectPoints);
 
 void computeCameraCalibration(std::vector<std::vector<Eigen::Vector2d>>& imagePoints,
         std::vector<std::vector<Eigen::Vector3d>>& objectPoints,
